@@ -244,12 +244,11 @@ function activate()
 
     dlg:add_label("<b>Model:</b>", 1, 1, 1, 1)
     model_dropdown = dlg:add_dropdown(2, 1, 2, 1)
-    model_dropdown:add_value("tiny", 1)
     model_dropdown:add_value("base", 2)
+    model_dropdown:add_value("tiny", 1)
     model_dropdown:add_value("small", 3)
     model_dropdown:add_value("medium", 4)
     model_dropdown:add_value("large-v3", 5)
-    model_dropdown:set_value(2) -- default to "base"
 
     dlg:add_button("Generate Subtitles", do_generate, 1, 2, 2, 1)
     dlg:add_button("Refresh", do_refresh, 3, 2, 1, 1)

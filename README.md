@@ -9,7 +9,7 @@ Auto-generate subtitles for any media playing in VLC, using local Whisper models
 VLCaption is a VLC extension that transcribes audio from your media files and loads subtitles directly into VLC. Everything runs locally on your machine -- no cloud APIs, no data leaves your computer.
 
 1. Open VLC and play a video
-2. Go to **View > VLCaption - Auto Subtitles**
+2. Go to **VLC > Extensions > VLCaption - Auto Subtitles**
 3. Pick a model size and click **Generate Subtitles**
 4. Subtitles appear automatically when transcription finishes
 
@@ -107,7 +107,7 @@ make test
 
 ## Troubleshooting
 
-**Extension doesn't appear in VLC**: Make sure the `.lua` file is in the correct extensions directory and restart VLC. Check VLC > Tools > Messages for errors.
+**Extension doesn't appear in VLC**: Make sure the `.lua` file is in the correct extensions directory and restart VLC. The extension should appear under **VLC > Extensions**. Check VLC > Tools > Messages for errors.
 
 **Server won't start**: Verify `python3 -m vlcaption` works from your terminal. The extension runs this command in the background.
 
