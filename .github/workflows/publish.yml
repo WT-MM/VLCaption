@@ -1,0 +1,60 @@
+name: Publish Python Packages
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      build_wheels:
+        description: "Build platform-specific wheels"
+        required: false
+        default: "false"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  build-source-dist:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Build source distribution
+        run: uv build --sdist
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-sdist
+          path: dist/*.tar.gz
+
+  publish:
+    needs: [build-source-dist]
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Publish to PyPI
+        run: uv publish dist/*
