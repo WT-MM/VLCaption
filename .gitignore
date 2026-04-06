@@ -1,0 +1,27 @@
+# .gitignore
+
+# Python
+*.py[oc]
+__pycache__/
+*.egg-info
+.eggs/
+.mypy_cache/*
+.pyre/
+.pytest_cache/
+.ruff_cache/
+.dmypy.json
+
+# Databases
+*.db
+
+# Development
+scratch/
+
+# Build artifacts
+build/
+dist/
+*.so
+out*/
+
+# Virtual environment
+.venv/
