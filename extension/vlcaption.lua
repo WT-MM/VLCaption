@@ -8,7 +8,18 @@ local SERVER_PORT = 9839
 local POLL_MESSAGE = "Click 'Refresh' to check progress..."
 
 -- Path to the launcher script created by install.sh
-local LAUNCHER_PATH = os.getenv("HOME") .. "/.config/vlcaption/launch-server.sh"
+local LAUNCHER_PATH = nil
+
+local function get_launcher_path()
+    if LAUNCHER_PATH then return LAUNCHER_PATH end
+    local home = os.getenv("HOME")
+        or os.getenv("USERPROFILE")
+        or (os.getenv("HOMEDRIVE") or "" ) .. (os.getenv("HOMEPATH") or "")
+    if home and #home > 0 then
+        LAUNCHER_PATH = home .. "/.config/vlcaption/launch-server.sh"
+    end
+    return LAUNCHER_PATH
+end
 
 -- VLC extension descriptor
 function descriptor()
@@ -162,14 +173,19 @@ local function start_server()
     end
 
     -- Find the launcher script
-    if not file_exists(LAUNCHER_PATH) then
-        log_err("Launcher not found: " .. LAUNCHER_PATH)
-        return false, "Launcher not found at: " .. LAUNCHER_PATH
+    local launcher = get_launcher_path()
+    if not launcher then
+        log_err("Could not determine HOME directory")
+        return false, "Could not determine HOME directory.\nSet HOME env var or run install.sh."
+    end
+    if not file_exists(launcher) then
+        log_err("Launcher not found: " .. launcher)
+        return false, "Launcher not found at: " .. launcher
             .. "\nRun install.sh to create it."
     end
 
     -- Launch server in background (non-blocking)
-    local cmd = '"' .. LAUNCHER_PATH .. '" > /dev/null 2>&1 &'
+    local cmd = '"' .. launcher .. '" > /dev/null 2>&1 &'
     log_info("Launching server: " .. cmd)
     os.execute(cmd)
     server_launched = true
