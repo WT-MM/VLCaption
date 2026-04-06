@@ -107,9 +107,17 @@ make test
 
 ## Troubleshooting
 
+**Debug logs**: Open **VLC > Tools > Messages** and set verbosity to **2 (debug)**. All VLCaption logs are prefixed with `[VLCaption]`.
+
 **Extension doesn't appear in VLC**: Make sure the `.lua` file is in the correct extensions directory and restart VLC. The extension should appear under **VLC > Extensions**. Check VLC > Tools > Messages for errors.
 
-**Server won't start**: Verify `python3 -m vlcaption` works from your terminal. The extension runs this command in the background.
+**Server won't start**: Run the launcher directly to see errors:
+```bash
+~/.config/vlcaption/launch-server.sh
+```
+If the launcher doesn't exist, re-run `./install.sh`.
+
+**"Starting server..." but nothing happens**: The server launches in the background. Click **Generate Subtitles** again after a few seconds. Check VLC > Tools > Messages for debug output.
 
 **Slow transcription**: Try the `tiny` or `base` model. If you have an NVIDIA GPU, ensure CUDA is installed for GPU acceleration.
 
