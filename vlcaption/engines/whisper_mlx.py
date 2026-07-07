@@ -26,7 +26,7 @@ class MlxWhisperEngine:
         self._repo = MODEL_REPOS[size]
         # mlx_whisper loads weights lazily on the first transcribe() call;
         # import here so a missing dependency fails at engine creation.
-        import mlx_whisper  # type: ignore[import-untyped]  # noqa: F401, PLC0415
+        import mlx_whisper  # noqa: F401, PLC0415
 
         logger.info("Using mlx-whisper model: %s", self._repo)
 

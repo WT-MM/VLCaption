@@ -24,7 +24,7 @@ class FasterWhisperEngine:
     name = "faster-whisper"
 
     def __init__(self, size: str, device: str = "auto") -> None:
-        from faster_whisper import WhisperModel  # type: ignore[import-untyped]  # noqa: PLC0415
+        from faster_whisper import WhisperModel  # noqa: PLC0415
 
         model_name = MODEL_NAMES[size]
         logger.info("Loading faster-whisper model: %s (device=%s)", model_name, device)

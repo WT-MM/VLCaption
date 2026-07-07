@@ -21,7 +21,7 @@ class ParakeetEngine:
     name = "parakeet"
 
     def __init__(self) -> None:
-        from parakeet_mlx import from_pretrained  # type: ignore[import-untyped]  # noqa: PLC0415
+        from parakeet_mlx import from_pretrained  # noqa: PLC0415
 
         logger.info("Loading Parakeet model: %s", MODEL_ID)
         self._model = from_pretrained(MODEL_ID)
