@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 WHISPER_SIZES = ("tiny", "base", "small", "medium", "large-v3", "turbo")
 
 MODEL_CHOICES: frozenset[str] = frozenset(
-    ("auto", "parakeet", *WHISPER_SIZES, *(f"whisper-{size}" for size in WHISPER_SIZES))
+    ("auto", "coreml", "coreml-fast", "parakeet", *WHISPER_SIZES, *(f"whisper-{size}" for size in WHISPER_SIZES))
 )
 
 
@@ -68,10 +68,23 @@ def create_engine(model: str, device: str = "auto") -> Engine:
     model = normalize_model(model)
 
     if model == "auto":
-        if _has_mlx_module("parakeet_mlx"):
+        if _is_apple_silicon() and _has_module("silicon_asr"):
+            model = "coreml"
+        elif _has_mlx_module("parakeet_mlx"):
             model = "parakeet"
         else:
             model = "turbo"
+
+    if model in ("coreml", "coreml-fast"):
+        if not (_is_apple_silicon() and _has_module("silicon_asr")):
+            raise RuntimeError(
+                "coreml engines need Apple Silicon with silicon-asr installed "
+                "(pip install 'vlcaption[mlx]'); use a whisper model on this machine"
+            )
+        from vlcaption.engines.silicon import SiliconEngine  # noqa: PLC0415
+
+        logger.info("Engine: silicon-asr (%s) on the Apple Neural Engine", model)
+        return SiliconEngine(model)
 
     if model == "parakeet":
         if not _has_mlx_module("parakeet_mlx"):

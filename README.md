@@ -58,7 +58,7 @@ Developed and tested end-to-end on **macOS (Apple Silicon, VLC 3.0.21)** only, s
 
 | Platform | Extension | Watch mode | Auto-load into VLC | Engine |
 |----------|-----------|------------|--------------------|--------|
-| macOS Apple Silicon | ✅ tested | ✅ tested | ✅ tested | Parakeet / mlx-whisper (GPU) |
+| macOS Apple Silicon | ✅ tested | ✅ tested | ✅ tested | Parakeet (ANE via silicon-asr) / mlx-whisper |
 | macOS Intel | should work | should work | should work | faster-whisper (CPU) |
 | Linux | untested | ❌ | ❌ click Refresh | faster-whisper (CPU/CUDA) |
 | Windows | ❌ | ❌ | ❌ | faster-whisper (CPU/CUDA) |
@@ -70,14 +70,17 @@ Reports and fixes from other platforms welcome.
 | Choice | Engine | Languages | Size |
 |--------|--------|-----------|------|
 | `auto` (default) | best available | — | — |
+| `coreml` | Parakeet on the Neural Engine via [silicon-asr](https://github.com/WT-MM/silicon-asr) | EN + 24 European | 1.2 GB |
+| `coreml-fast` | Parakeet CTC 110M, ~1000x realtime, draft quality | English | 0.2 GB |
 | `parakeet` | parakeet-mlx, Apple GPU | EN + 24 European | 1.2 GB |
 | `turbo` | mlx-whisper / faster-whisper | ~100 | 1.6 GB |
 | `tiny`…`large-v3` | mlx-whisper / faster-whisper | ~100 | 75 MB – 3 GB |
 
-Models download on first use. `auto` = Parakeet on Apple Silicon, Whisper
-turbo elsewhere (CUDA float16 on NVIDIA, int8 on CPU). The engine chosen is
-logged per job. No torch/MPS path on purpose: MLX is faster than the MPS
-Whisper ports and CTranslate2 has no Metal backend.
+Models download on first use. `auto` = CoreML/ANE Parakeet on Apple Silicon
+(~1.7x faster than MLX at much lower power), Whisper turbo elsewhere (CUDA
+float16 on NVIDIA, int8 on CPU). The engine chosen is logged per job. No
+torch/MPS path on purpose: MLX and the ANE beat the MPS Whisper ports and
+CTranslate2 has no Metal backend.
 
 ## Embed captions into the video
 

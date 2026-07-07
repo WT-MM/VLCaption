@@ -289,7 +289,7 @@ local function do_generate()
     end
 
     -- Server is running, proceed with transcription
-    local model_choices = {"auto", "parakeet", "whisper-turbo", "whisper-base", "whisper-large-v3"}
+    local model_choices = {"auto", "coreml", "coreml-fast", "whisper-turbo", "whisper-base"}
     local model_idx = model_dropdown:get_value()
     local model = model_choices[model_idx] or "auto"
     log_info("Generating subtitles with model: " .. model .. " for: " .. path)
@@ -378,10 +378,10 @@ function activate()
     model_dropdown = dlg:add_dropdown(2, 1, 2, 1)
     -- Ids index into model_choices in do_generate; first entry is default.
     model_dropdown:add_value("auto (best available)", 1)
-    model_dropdown:add_value("parakeet (fast, accurate)", 2)
-    model_dropdown:add_value("whisper turbo (100 languages)", 3)
-    model_dropdown:add_value("whisper base (small download)", 4)
-    model_dropdown:add_value("whisper large-v3 (slowest)", 5)
+    model_dropdown:add_value("coreml (fast, accurate)", 2)
+    model_dropdown:add_value("coreml-fast (instant, draft quality)", 3)
+    model_dropdown:add_value("whisper turbo (100 languages)", 4)
+    model_dropdown:add_value("whisper base (small download)", 5)
 
     -- Wrap callbacks in pcall so any unexpected error is shown to the
     -- user instead of being silently swallowed by VLC's extension host.
