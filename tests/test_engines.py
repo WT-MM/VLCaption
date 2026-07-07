@@ -5,8 +5,10 @@ import pytest
 from vlcaption.engines import MODEL_CHOICES, normalize_model
 
 
-def test_model_choices_include_auto_and_parakeet() -> None:
+def test_model_choices_include_auto_and_coreml() -> None:
     assert "auto" in MODEL_CHOICES
+    assert "coreml" in MODEL_CHOICES
+    assert "coreml-fast" in MODEL_CHOICES
     assert "parakeet" in MODEL_CHOICES
 
 
