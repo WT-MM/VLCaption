@@ -100,7 +100,7 @@ namespace_packages = false
 # CI/Linux — an inline ignore can't cover both error codes.
 [[tool.mypy.overrides]]
 
-module = ["faster_whisper", "mlx_whisper", "parakeet_mlx"]
+module = ["faster_whisper", "mlx_whisper", "parakeet_mlx", "silicon_asr.*"]
 ignore_missing_imports = true
 
 [tool.ruff]
