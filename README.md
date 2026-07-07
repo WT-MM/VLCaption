@@ -30,9 +30,14 @@ auto-load on every future open.
 ## Install
 
 ```bash
-# From PyPI
+# From PyPI — with uv
 uv tool install "vlcaption[mlx]"   # Apple Silicon ([mlx] = fast engines)
 uv tool install vlcaption          # elsewhere
+
+# ...or with pip / pipx
+pip install "vlcaption[mlx]"
+pipx install "vlcaption[mlx]"
+
 vlcaption install                  # set up the VLC extension (optional)
 
 # Or from source
