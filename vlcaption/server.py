@@ -10,6 +10,9 @@ from argparse import ArgumentParser
 
 from flask import Flask, Response, request
 
+from vlcaption import vlc
+from vlcaption.engines import MODEL_CHOICES
+from vlcaption.env import ensure_tool_paths
 from vlcaption.srt import write_srt_file
 from vlcaption.transcriber import Transcriber
 
@@ -73,11 +76,18 @@ def transcribe() -> Response:
     """Start a transcription job."""
     data = request.get_json(silent=True) or {}
     file_path = data.get("file_path", "")
-    model = data.get("model", "base")
+    model = data.get("model", "auto")
     language = data.get("language")
+    auto_load = bool(data.get("auto_load", True))
 
     if not file_path:
         return _json_response({"status": "error", "message": "file_path is required"}, 400)
+
+    if not isinstance(model, str) or model not in MODEL_CHOICES:
+        return _json_response(
+            {"status": "error", "message": f"model must be one of: {', '.join(sorted(MODEL_CHOICES))}"},
+            400,
+        )
 
     if not os.path.isfile(file_path):
         return _json_response({"status": "error", "message": f"File not found: {file_path}"}, 400)
@@ -87,11 +97,12 @@ def transcribe() -> Response:
 
     def _run_transcription() -> None:
         try:
-            segments = transcriber.transcribe(file_path, model_size=model, language=language)
-            srt_path = write_srt_file(segments, file_path)
-            detected_lang = transcriber.progress.snapshot().get("language", "unknown")
-            transcriber.progress.set_complete(srt_path, str(detected_lang))
+            result = transcriber.transcribe(file_path, model=model, language=language)
+            srt_path = write_srt_file(result.segments, file_path)
+            transcriber.progress.set_complete(srt_path)
             logger.info("Transcription complete: %s", srt_path)
+            if auto_load:
+                vlc.push_subtitle(srt_path, media_path=file_path)
         except Exception:
             pass  # Error is already set in transcriber.progress
 
@@ -125,8 +136,11 @@ def main() -> None:
     parser = ArgumentParser(description="VLCaption transcription server")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=9839, help="Port to bind to (default: 9839)")
-    parser.add_argument("--model", default="base", help="Default Whisper model size (default: base)")
-    parser.add_argument("--device", default="auto", help="Compute device: auto, cpu, cuda (default: auto)")
+    parser.add_argument(
+        "--device",
+        default="auto",
+        help="Compute device for the faster-whisper fallback: auto, cpu, cuda (default: auto)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -134,6 +148,7 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
+    ensure_tool_paths()
     transcriber.set_device(args.device)
     logger.info("Starting VLCaption server on %s:%d (device=%s)", args.host, args.port, args.device)
 

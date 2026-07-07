@@ -1,9 +1,18 @@
 [project]
 
 name = "vlcaption"
-description = "Auto-generate subtitles for VLC media player using local Whisper models"
+description = "Auto-generate subtitles for VLC using fast, fully-local speech-to-text (Parakeet + Whisper)"
 authors = [
     { name = "WT-MM" },
+]
+keywords = ["vlc", "subtitles", "whisper", "parakeet", "speech-to-text", "srt", "transcription", "mlx"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Multimedia :: Video",
 ]
 license = "MIT"
 readme = "README.md"
@@ -25,10 +34,16 @@ dev = [
     "mypy",
     "pytest",
 ]
+mlx = [
+    "mlx-whisper>=0.4",
+    "parakeet-mlx>=0.5",
+]
 
 [project.scripts]
 
 vlcaption-server = "vlcaption.server:main"
+vlcaption-watch = "vlcaption.watcher:main"
+vlcaption-embed = "vlcaption.embed:main"
 
 [build-system]
 
@@ -77,6 +92,13 @@ warn_redundant_casts = true
 
 incremental = true
 namespace_packages = false
+
+# Optional engine dependencies: untyped when installed (macOS), absent on
+# CI/Linux — an inline ignore can't cover both error codes.
+[[tool.mypy.overrides]]
+
+module = ["faster_whisper", "mlx_whisper", "parakeet_mlx"]
+ignore_missing_imports = true
 
 [tool.ruff]
 

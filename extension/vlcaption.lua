@@ -5,6 +5,7 @@
 
 local SERVER_HOST = "127.0.0.1"
 local SERVER_PORT = 9839
+local SERVER_URL = "http://" .. SERVER_HOST .. ":" .. SERVER_PORT
 local POLL_MESSAGE = "Click 'Refresh' to check progress..."
 
 -- Path to the launcher script created by install.sh
@@ -31,8 +32,13 @@ function descriptor()
         shortdesc = "VLCaption",
         description = "Auto-generate subtitles using local Whisper models. "
             .. "Requires the VLCaption Python server.",
-        capabilities = {}
+        capabilities = { "input-listener" }
     }
+end
+
+-- Input-listener stub. Required because we declare the capability so that
+-- the extension reliably appears in VLC's menu on all platforms.
+function input_changed()
 end
 
 -- State
@@ -95,51 +101,45 @@ local function get_media_path()
 end
 
 ---------------------------------------------------------------------
--- HTTP helper (raw TCP via vlc.net)
+-- HTTP helper (via curl + io.popen)
+--
+-- vlc.net is not officially exposed to the *extension* lua context in
+-- VLC 3, so calling vlc.net.connect_tcp from a button callback fails
+-- silently. curl is available on every supported platform and io.popen
+-- is part of the standard lua library that extensions get.
 ---------------------------------------------------------------------
+
+local function shell_quote(s)
+    -- POSIX-safe single-quote wrap. Replaces ' with '\''.
+    return "'" .. tostring(s):gsub("'", "'\\''") .. "'"
+end
 
 local function http_request(method, path, body)
     log_dbg("HTTP " .. method .. " " .. path)
-    local fd = vlc.net.connect_tcp(SERVER_HOST, SERVER_PORT)
-    if not fd or fd < 0 then
-        log_dbg("TCP connect failed (fd=" .. tostring(fd) .. ")")
-        return nil, "Could not connect to VLCaption server."
-    end
-    log_dbg("TCP connected (fd=" .. tostring(fd) .. ")")
-
-    local req = method .. " " .. path .. " HTTP/1.1\r\n"
-        .. "Host: " .. SERVER_HOST .. ":" .. SERVER_PORT .. "\r\n"
-        .. "Connection: close\r\n"
-
+    local url = SERVER_URL .. path
+    -- Keep well under VLC's ~10s extension watchdog, which offers to kill
+    -- any extension whose callback blocks that long.
+    local cmd = "curl -sS --max-time 5 -X " .. method
+        .. " -H " .. shell_quote("Content-Type: application/json")
     if body then
-        req = req .. "Content-Type: application/json\r\n"
-            .. "Content-Length: " .. #body .. "\r\n"
-            .. "\r\n" .. body
-    else
-        req = req .. "\r\n"
+        cmd = cmd .. " --data-binary " .. shell_quote(body)
     end
+    cmd = cmd .. " " .. shell_quote(url) .. " 2>/dev/null"
 
-    vlc.net.send(fd, req)
-
-    -- Read response (may come in chunks)
-    local response = ""
-    while true do
-        local chunk = vlc.net.recv(fd, 4096)
-        if not chunk or #chunk == 0 then break end
-        response = response .. chunk
+    local pipe = io.popen(cmd, "r")
+    if not pipe then
+        log_dbg("io.popen failed")
+        return nil, "Could not run curl. Is it installed?"
     end
-
-    vlc.net.close(fd)
+    local response = pipe:read("*a") or ""
+    pipe:close()
 
     if #response == 0 then
-        log_dbg("Empty response")
-        return nil, "Empty response from server."
+        log_dbg("Empty response from curl (server probably not running)")
+        return nil, "Could not connect to VLCaption server."
     end
-
-    -- Split headers and body
-    local _, _, resp_body = response:find("\r\n\r\n(.*)")
-    log_dbg("Response body: " .. (resp_body or "nil"):sub(1, 200))
-    return resp_body or response, nil
+    log_dbg("Response body: " .. response:sub(1, 200))
+    return response, nil
 end
 
 local function server_is_running()
@@ -184,8 +184,11 @@ local function start_server()
             .. "\nRun install.sh to create it."
     end
 
-    -- Launch server in background (non-blocking)
-    local cmd = '"' .. launcher .. '" > /dev/null 2>&1 &'
+    -- Launch server fully detached so VLC isn't waiting on it.
+    -- nohup + redirected stdin/stdout/stderr + & yields a daemonized
+    -- child that survives even if VLC's foreground shell exits.
+    local cmd = "nohup " .. shell_quote(launcher)
+        .. " </dev/null >/dev/null 2>&1 &"
     log_info("Launching server: " .. cmd)
     os.execute(cmd)
     server_launched = true
@@ -207,6 +210,49 @@ local function json_value(body, key)
 end
 
 ---------------------------------------------------------------------
+-- Status label helpers
+--
+-- The macOS dialog sizes itself to the widgets present at creation;
+-- longer text set later gets clipped. So the initial label reserves a
+-- generous width, every message is word-wrapped to fit inside it, and
+-- file paths are shown as basenames.
+---------------------------------------------------------------------
+
+local WRAP_WIDTH = 70
+
+local function wrap_text(msg)
+    local out = {}
+    for line in msg:gmatch("[^\n]+") do
+        local cur = ""
+        for word in line:gmatch("%S+") do
+            if #cur == 0 then
+                cur = word
+            elseif #cur + #word + 1 <= WRAP_WIDTH then
+                cur = cur .. " " .. word
+            else
+                table.insert(out, cur)
+                cur = word
+            end
+        end
+        table.insert(out, cur)
+    end
+    return table.concat(out, "\n")
+end
+
+local function set_status(msg)
+    if status_label then
+        status_label:set_text(wrap_text(msg))
+    end
+    if dlg then
+        dlg:update()
+    end
+end
+
+local function basename(path)
+    return path:match("([^/\\]+)$") or path
+end
+
+---------------------------------------------------------------------
 -- Actions
 ---------------------------------------------------------------------
 
@@ -214,29 +260,41 @@ local function do_generate()
     -- Get current media path
     local path, err = get_media_path()
     if err then
-        status_label:set_text("Error: " .. err)
+        set_status("Error: " .. err)
         return
     end
 
-    -- Check/start server (non-blocking)
+    -- Check/start server
     local result, start_err = start_server()
     if result == nil then
-        -- Server was just launched, not ready yet
-        status_label:set_text("Server starting... click 'Generate Subtitles' again in a few seconds.")
-        return
+        -- Just launched: give it a few seconds to come up instead of
+        -- making the user click again. Bounded at ~4s total so we stay
+        -- far from VLC's ~10s extension watchdog (health checks against
+        -- a closed port fail instantly).
+        set_status("Starting transcription server...")
+        for _ = 1, 8 do
+            os.execute("sleep 0.5")
+            if server_is_running() then
+                result = true
+                break
+            end
+        end
+        if result ~= true then
+            set_status("Server is still starting... click 'Generate Subtitles' again in a moment.")
+            return
+        end
     elseif result == false then
-        status_label:set_text("Error: " .. (start_err or "Could not start server."))
+        set_status("Error: " .. (start_err or "Could not start server."))
         return
     end
 
     -- Server is running, proceed with transcription
-    local model_choices = {"tiny", "base", "small", "medium", "large-v3"}
+    local model_choices = {"auto", "parakeet", "whisper-turbo", "whisper-base", "whisper-large-v3"}
     local model_idx = model_dropdown:get_value()
-    local model = model_choices[model_idx] or "base"
+    local model = model_choices[model_idx] or "auto"
     log_info("Generating subtitles with model: " .. model .. " for: " .. path)
 
-    status_label:set_text("Sending transcription request (" .. model .. ")...")
-    dlg:update()
+    set_status("Sending transcription request (" .. model .. ")...")
 
     -- Start transcription
     local body_str = '{"file_path": "' .. path:gsub('\\', '\\\\'):gsub('"', '\\"')
@@ -244,33 +302,34 @@ local function do_generate()
 
     local resp, req_err = http_request("POST", "/transcribe", body_str)
     if req_err then
-        status_label:set_text("Error: " .. req_err)
+        set_status("Error: " .. req_err)
         return
     end
 
     local status = json_value(resp, "status")
     if status == "error" then
         local msg = json_value(resp, "message") or "Unknown error"
-        status_label:set_text("Error: " .. msg)
+        set_status("Error: " .. msg)
         return
     end
 
-    status_label:set_text("Transcribing... " .. POLL_MESSAGE)
+    set_status("Transcribing '" .. basename(path) .. "'...\n"
+        .. "Subtitles will load automatically when done. " .. POLL_MESSAGE)
 end
 
 local function do_refresh()
     if not server_is_running() then
         if server_launched then
-            status_label:set_text("Server is still starting... try again in a moment.")
+            set_status("Server is still starting... try again in a moment.")
         else
-            status_label:set_text("Server is not running. Click 'Generate Subtitles' to start it.")
+            set_status("Server is not running. Click 'Generate Subtitles' to start it.")
         end
         return
     end
 
     local resp, err = http_request("GET", "/progress", nil)
     if err then
-        status_label:set_text("Error: " .. err)
+        set_status("Error: " .. err)
         return
     end
 
@@ -278,28 +337,32 @@ local function do_refresh()
     log_dbg("Progress status: " .. tostring(status))
 
     if status == "idle" then
-        status_label:set_text("Ready. No transcription in progress.")
+        set_status("Ready. No transcription in progress.")
+    elseif status == "loading_model" then
+        set_status("Loading transcription model (downloads on first use)...\n" .. POLL_MESSAGE)
     elseif status == "transcribing" then
         local pct = json_value(resp, "percent") or 0
-        status_label:set_text("Transcribing... " .. pct .. "% complete.\n" .. POLL_MESSAGE)
+        set_status("Transcribing... " .. pct .. "% complete.\n" .. POLL_MESSAGE)
     elseif status == "complete" then
         local srt = json_value(resp, "srt_path")
         local lang = json_value(resp, "language") or "?"
         if srt then
             log_info("Loading subtitles: " .. srt)
-            status_label:set_text("Done! Language: " .. lang .. "\nLoading subtitles...")
-            dlg:update()
-            vlc.input.add_subtitle(srt)
-            status_label:set_text("Subtitles loaded! (" .. lang .. ")\n" .. srt)
+            -- The server already pushed the subtitles into VLC; adding
+            -- again is a harmless no-op safety net for older servers.
+            -- Second arg selects the track; without it the subtitles are
+            -- added but stay disabled.
+            vlc.input.add_subtitle(srt, true)
+            set_status("Subtitles loaded! (" .. lang .. ")\nSaved as " .. basename(srt))
         else
-            status_label:set_text("Complete, but no SRT path returned.")
+            set_status("Complete, but no SRT path returned.")
         end
     elseif status == "error" then
         local msg = json_value(resp, "message") or "Unknown error"
         log_err("Transcription error: " .. msg)
-        status_label:set_text("Error: " .. msg)
+        set_status("Error: " .. msg)
     else
-        status_label:set_text("Unknown status: " .. (status or "nil"))
+        set_status("Unknown status: " .. (status or "nil"))
     end
 end
 
@@ -313,16 +376,33 @@ function activate()
 
     dlg:add_label("<b>Model:</b>", 1, 1, 1, 1)
     model_dropdown = dlg:add_dropdown(2, 1, 2, 1)
-    model_dropdown:add_value("base", 2)
-    model_dropdown:add_value("tiny", 1)
-    model_dropdown:add_value("small", 3)
-    model_dropdown:add_value("medium", 4)
-    model_dropdown:add_value("large-v3", 5)
+    -- Ids index into model_choices in do_generate; first entry is default.
+    model_dropdown:add_value("auto (best available)", 1)
+    model_dropdown:add_value("parakeet (fast, accurate)", 2)
+    model_dropdown:add_value("whisper turbo (100 languages)", 3)
+    model_dropdown:add_value("whisper base (small download)", 4)
+    model_dropdown:add_value("whisper large-v3 (slowest)", 5)
 
-    dlg:add_button("Generate Subtitles", do_generate, 1, 2, 2, 1)
-    dlg:add_button("Refresh", do_refresh, 3, 2, 1, 1)
+    -- Wrap callbacks in pcall so any unexpected error is shown to the
+    -- user instead of being silently swallowed by VLC's extension host.
+    local function safe(fn)
+        return function()
+            local ok, err = pcall(fn)
+            if not ok then
+                log_err("Callback error: " .. tostring(err))
+                set_status("Internal error: " .. tostring(err))
+            end
+        end
+    end
 
-    status_label = dlg:add_label("Ready. Play a media file and click 'Generate Subtitles'.", 1, 3, 3, 1)
+    dlg:add_button("Generate Subtitles", safe(do_generate), 1, 2, 2, 1)
+    dlg:add_button("Refresh", safe(do_refresh), 3, 2, 1, 1)
+
+    -- This first string sets the dialog's width for its lifetime (later
+    -- set_text calls don't grow the window), so keep it the longest line.
+    status_label = dlg:add_label(
+        "Ready. Play a media file and click 'Generate Subtitles' to create and load subtitles.",
+        1, 3, 3, 1)
 
     dlg:show()
     log_info("Dialog shown")
@@ -330,10 +410,10 @@ end
 
 function deactivate()
     log_info("Extension deactivating")
-    -- Try to shut down the server gracefully
-    pcall(function()
-        http_request("POST", "/shutdown", nil)
-    end)
+    -- Do NOT shut the server down here: on macOS, VLC deactivates the
+    -- extension every time a new media file is opened, which would kill
+    -- in-flight transcriptions. The server exits on its own 30-minute
+    -- idle timer instead.
 
     if dlg then
         dlg:hide()
