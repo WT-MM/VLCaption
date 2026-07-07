@@ -17,7 +17,8 @@ from argparse import ArgumentParser
 from vlcaption import vlc
 from vlcaption.embed import can_embed, embed_subtitles
 from vlcaption.env import ensure_tool_paths
-from vlcaption.srt import write_srt_file
+from vlcaption.media import extract_audio_segment, media_duration
+from vlcaption.srt import Segment, write_srt_file
 from vlcaption.transcriber import Transcriber
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,26 @@ logger = logging.getLogger(__name__)
 VIDEO_EXTENSIONS = frozenset(
     {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm", ".wmv", ".flv", ".mpg", ".mpeg", ".ts", ".ogv"}
 )
+
+# Progressive mode: for long files, transcribe a window around the playhead
+# first so subtitles appear within seconds, then do the full pass.
+QUICK_WINDOW_SECONDS = 300.0
+QUICK_LEAD_SECONDS = 15.0  # start slightly behind the playhead
+PROGRESSIVE_MIN_DURATION = 600.0  # under this, one full pass is fast enough
+
+
+def quick_pass_window(
+    duration: float | None,
+    playhead: float | None,
+    window: float = QUICK_WINDOW_SECONDS,
+) -> tuple[float, float] | None:
+    """(start, length) for a quick-start pass, or None to go straight to full."""
+    if duration is None or duration < PROGRESSIVE_MIN_DURATION:
+        return None
+    start = max(0.0, (playhead or 0.0) - QUICK_LEAD_SECONDS)
+    if start >= duration:
+        return None
+    return start, min(window, duration - start)
 
 
 class Watcher:
@@ -36,13 +57,31 @@ class Watcher:
         overwrite: bool = False,
         include_audio: bool = False,
         embed: bool = False,
+        progressive: bool = True,
+        quick_window: float = QUICK_WINDOW_SECONDS,
     ) -> None:
         self._model = model
         self._overwrite = overwrite
         self._include_audio = include_audio
         self._embed = embed
+        self._progressive = progressive
+        self._quick_window = quick_window
         self._transcriber = Transcriber()
         self._handled: set[str] = set()
+
+    def _quick_pass(self, path: str, window: tuple[float, float]) -> None:
+        """Subtitle a window around the playhead and push it immediately."""
+        start, length = window
+        logger.info("Quick-start pass: %.0fs of audio from %.0fs in", length, start)
+        wav = extract_audio_segment(path, start, length)
+        try:
+            result = self._transcriber.transcribe(wav, model=self._model)
+            segments = [Segment(start=s.start + start, end=s.end + start, text=s.text) for s in result.segments]
+            srt_path = write_srt_file(segments, path)
+            vlc.push_subtitle(srt_path, media_path=path)
+            logger.info("Quick-start subtitles up (%d cues); full pass next", len(segments))
+        finally:
+            os.unlink(wav)
 
     def _should_handle(self, path: str) -> bool:
         if path in self._handled or not os.path.isfile(path):
@@ -66,6 +105,14 @@ class Watcher:
             return
 
         logger.info("New media playing: %s", path)
+        if self._progressive:
+            window = quick_pass_window(media_duration(path), vlc.playhead(), self._quick_window)
+            if window:
+                try:
+                    self._quick_pass(path, window)
+                except Exception:
+                    logger.exception("Quick-start pass failed; falling back to the full pass")
+
         result = self._transcriber.transcribe(path, model=self._model)
         srt_path = write_srt_file(result.segments, path)
         logger.info("Wrote %d segments (language=%s): %s", len(result.segments), result.language, srt_path)
@@ -100,6 +147,17 @@ def main() -> None:
         action="store_true",
         help="Also write a <name>.subbed.<ext> copy with the subtitles embedded as a track",
     )
+    parser.add_argument(
+        "--no-progressive",
+        action="store_true",
+        help="Skip the quick-start pass on long files; always do one full pass",
+    )
+    parser.add_argument(
+        "--quick-window",
+        type=float,
+        default=QUICK_WINDOW_SECONDS,
+        help=f"Seconds of audio around the playhead for the quick-start pass (default: {QUICK_WINDOW_SECONDS:.0f})",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -111,7 +169,14 @@ def main() -> None:
         parser.error("watch mode currently supports macOS only (uses VLC's AppleScript interface)")
 
     ensure_tool_paths()
-    watcher = Watcher(model=args.model, overwrite=args.overwrite, include_audio=args.include_audio, embed=args.embed)
+    watcher = Watcher(
+        model=args.model,
+        overwrite=args.overwrite,
+        include_audio=args.include_audio,
+        embed=args.embed,
+        progressive=not args.no_progressive,
+        quick_window=args.quick_window,
+    )
     try:
         watcher.run(interval=args.interval)
     except KeyboardInterrupt:

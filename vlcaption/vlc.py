@@ -55,6 +55,18 @@ def current_item() -> str | None:
     return out or None
 
 
+def playhead() -> float | None:
+    """Current playback position in seconds, or None if unavailable."""
+    if not is_running():
+        return None
+    out = _osascript('tell application "VLC" to get current time')
+    try:
+        seconds = float(out) if out else -1.0
+    except ValueError:
+        return None
+    return seconds if seconds >= 0 else None
+
+
 def push_subtitle(srt_path: str, media_path: str | None = None) -> bool:
     """Load an SRT into the running VLC input and auto-select it.
 

@@ -24,6 +24,10 @@ demand and exits a couple of minutes after VLC quits.
 vlcaption watch    # --model auto --interval 3 --overwrite --include-audio --embed
 ```
 
+Long files are progressive: a quick pass around the playhead puts
+subtitles up within seconds, then the full pass replaces them
+(`--no-progressive` to disable, `--quick-window` to size the first pass).
+
 Either way, captions are saved as `movie.srt` next to `movie.mp4`, so they
 auto-load on every future open.
 
