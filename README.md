@@ -21,7 +21,7 @@ demand and exits a couple of minutes after VLC quits.
 **Watch mode (macOS):** zero clicks — subtitles whatever VLC plays:
 
 ```bash
-vlcaption-watch    # --model auto --interval 3 --overwrite --include-audio --embed
+vlcaption watch    # --model auto --interval 3 --overwrite --include-audio --embed
 ```
 
 Either way, captions are saved as `movie.srt` next to `movie.mp4`, so they
@@ -33,7 +33,7 @@ auto-load on every future open.
 # From PyPI
 uv tool install "vlcaption[mlx]"   # Apple Silicon ([mlx] = fast engines)
 uv tool install vlcaption          # elsewhere
-vlcaption-install                  # set up the VLC extension (optional)
+vlcaption install                  # set up the VLC extension (optional)
 
 # Or from source
 git clone https://github.com/WT-MM/VLCaption.git && cd VLCaption && ./install.sh
@@ -76,14 +76,16 @@ Lossless remux (mp4/m4v/mov/mkv/webm) — the `.srt` becomes a subtitle
 track inside the file:
 
 ```bash
-vlcaption-embed movie.mp4                # writes movie.subbed.mp4
-vlcaption-embed movie.mp4 --replace      # in place (atomic)
+vlcaption embed movie.mp4               # writes movie.subbed.mp4
+vlcaption embed movie.mp4 --replace     # in place (atomic)
 ```
 
 ## Server API
 
-The extension auto-starts `vlcaption-server` (port 9839). Run it yourself
-with `--host/--port/--device/--exit-with-vlc`. Endpoints: `POST /transcribe`
+The extension auto-starts the server (port 9839). Run it yourself as
+`vlcaption serve`
+with `--host/--port/--device/--exit-with-vlc`. Hyphenated aliases
+(`vlcaption-watch`, `vlcaption-server`, ...) also exist. Endpoints: `POST /transcribe`
 (`file_path`, `model`, `language`, `auto_load`), `GET /progress`,
 `GET /health`, `POST /shutdown`.
 

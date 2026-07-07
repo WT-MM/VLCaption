@@ -41,6 +41,8 @@ mlx = [
 
 [project.scripts]
 
+vlcaption = "vlcaption.cli:main"
+# Hyphenated aliases; the extension's launcher uses vlcaption-server.
 vlcaption-server = "vlcaption.server:main"
 vlcaption-watch = "vlcaption.watcher:main"
 vlcaption-embed = "vlcaption.embed:main"
