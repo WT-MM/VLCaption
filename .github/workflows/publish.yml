@@ -51,10 +51,10 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # No enable-cache here: this job doesn't check out the repo, and
+      # the cache setup fails without a uv.lock to hash.
       - name: Set up uv
         uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
 
       - name: Publish to PyPI
         run: uv publish dist/*
