@@ -210,6 +210,49 @@ local function json_value(body, key)
 end
 
 ---------------------------------------------------------------------
+-- Status label helpers
+--
+-- The macOS dialog sizes itself to the widgets present at creation;
+-- longer text set later gets clipped. So the initial label reserves a
+-- generous width, every message is word-wrapped to fit inside it, and
+-- file paths are shown as basenames.
+---------------------------------------------------------------------
+
+local WRAP_WIDTH = 70
+
+local function wrap_text(msg)
+    local out = {}
+    for line in msg:gmatch("[^\n]+") do
+        local cur = ""
+        for word in line:gmatch("%S+") do
+            if #cur == 0 then
+                cur = word
+            elseif #cur + #word + 1 <= WRAP_WIDTH then
+                cur = cur .. " " .. word
+            else
+                table.insert(out, cur)
+                cur = word
+            end
+        end
+        table.insert(out, cur)
+    end
+    return table.concat(out, "\n")
+end
+
+local function set_status(msg)
+    if status_label then
+        status_label:set_text(wrap_text(msg))
+    end
+    if dlg then
+        dlg:update()
+    end
+end
+
+local function basename(path)
+    return path:match("([^/\\]+)$") or path
+end
+
+---------------------------------------------------------------------
 -- Actions
 ---------------------------------------------------------------------
 
@@ -217,18 +260,31 @@ local function do_generate()
     -- Get current media path
     local path, err = get_media_path()
     if err then
-        status_label:set_text("Error: " .. err)
+        set_status("Error: " .. err)
         return
     end
 
-    -- Check/start server (non-blocking)
+    -- Check/start server
     local result, start_err = start_server()
     if result == nil then
-        -- Server was just launched, not ready yet
-        status_label:set_text("Server starting... click 'Generate Subtitles' again in a few seconds.")
-        return
+        -- Just launched: give it a few seconds to come up instead of
+        -- making the user click again. Bounded at ~4s total so we stay
+        -- far from VLC's ~10s extension watchdog (health checks against
+        -- a closed port fail instantly).
+        set_status("Starting transcription server...")
+        for _ = 1, 8 do
+            os.execute("sleep 0.5")
+            if server_is_running() then
+                result = true
+                break
+            end
+        end
+        if result ~= true then
+            set_status("Server is still starting... click 'Generate Subtitles' again in a moment.")
+            return
+        end
     elseif result == false then
-        status_label:set_text("Error: " .. (start_err or "Could not start server."))
+        set_status("Error: " .. (start_err or "Could not start server."))
         return
     end
 
@@ -238,8 +294,7 @@ local function do_generate()
     local model = model_choices[model_idx] or "auto"
     log_info("Generating subtitles with model: " .. model .. " for: " .. path)
 
-    status_label:set_text("Sending transcription request (" .. model .. ")...")
-    dlg:update()
+    set_status("Sending transcription request (" .. model .. ")...")
 
     -- Start transcription
     local body_str = '{"file_path": "' .. path:gsub('\\', '\\\\'):gsub('"', '\\"')
@@ -247,33 +302,34 @@ local function do_generate()
 
     local resp, req_err = http_request("POST", "/transcribe", body_str)
     if req_err then
-        status_label:set_text("Error: " .. req_err)
+        set_status("Error: " .. req_err)
         return
     end
 
     local status = json_value(resp, "status")
     if status == "error" then
         local msg = json_value(resp, "message") or "Unknown error"
-        status_label:set_text("Error: " .. msg)
+        set_status("Error: " .. msg)
         return
     end
 
-    status_label:set_text("Transcribing... subtitles will load automatically when done.\n" .. POLL_MESSAGE)
+    set_status("Transcribing '" .. basename(path) .. "'...\n"
+        .. "Subtitles will load automatically when done. " .. POLL_MESSAGE)
 end
 
 local function do_refresh()
     if not server_is_running() then
         if server_launched then
-            status_label:set_text("Server is still starting... try again in a moment.")
+            set_status("Server is still starting... try again in a moment.")
         else
-            status_label:set_text("Server is not running. Click 'Generate Subtitles' to start it.")
+            set_status("Server is not running. Click 'Generate Subtitles' to start it.")
         end
         return
     end
 
     local resp, err = http_request("GET", "/progress", nil)
     if err then
-        status_label:set_text("Error: " .. err)
+        set_status("Error: " .. err)
         return
     end
 
@@ -281,32 +337,32 @@ local function do_refresh()
     log_dbg("Progress status: " .. tostring(status))
 
     if status == "idle" then
-        status_label:set_text("Ready. No transcription in progress.")
+        set_status("Ready. No transcription in progress.")
     elseif status == "loading_model" then
-        status_label:set_text("Loading transcription model (downloads on first use)...\n" .. POLL_MESSAGE)
+        set_status("Loading transcription model (downloads on first use)...\n" .. POLL_MESSAGE)
     elseif status == "transcribing" then
         local pct = json_value(resp, "percent") or 0
-        status_label:set_text("Transcribing... " .. pct .. "% complete.\n" .. POLL_MESSAGE)
+        set_status("Transcribing... " .. pct .. "% complete.\n" .. POLL_MESSAGE)
     elseif status == "complete" then
         local srt = json_value(resp, "srt_path")
         local lang = json_value(resp, "language") or "?"
         if srt then
             log_info("Loading subtitles: " .. srt)
-            status_label:set_text("Done! Language: " .. lang .. "\nLoading subtitles...")
-            dlg:update()
+            -- The server already pushed the subtitles into VLC; adding
+            -- again is a harmless no-op safety net for older servers.
             -- Second arg selects the track; without it the subtitles are
             -- added but stay disabled.
             vlc.input.add_subtitle(srt, true)
-            status_label:set_text("Subtitles loaded! (" .. lang .. ")\n" .. srt)
+            set_status("Subtitles loaded! (" .. lang .. ")\nSaved as " .. basename(srt))
         else
-            status_label:set_text("Complete, but no SRT path returned.")
+            set_status("Complete, but no SRT path returned.")
         end
     elseif status == "error" then
         local msg = json_value(resp, "message") or "Unknown error"
         log_err("Transcription error: " .. msg)
-        status_label:set_text("Error: " .. msg)
+        set_status("Error: " .. msg)
     else
-        status_label:set_text("Unknown status: " .. (status or "nil"))
+        set_status("Unknown status: " .. (status or "nil"))
     end
 end
 
@@ -334,9 +390,7 @@ function activate()
             local ok, err = pcall(fn)
             if not ok then
                 log_err("Callback error: " .. tostring(err))
-                if status_label then
-                    status_label:set_text("Internal error: " .. tostring(err))
-                end
+                set_status("Internal error: " .. tostring(err))
             end
         end
     end
@@ -344,7 +398,11 @@ function activate()
     dlg:add_button("Generate Subtitles", safe(do_generate), 1, 2, 2, 1)
     dlg:add_button("Refresh", safe(do_refresh), 3, 2, 1, 1)
 
-    status_label = dlg:add_label("Ready. Play a media file and click 'Generate Subtitles'.", 1, 3, 3, 1)
+    -- This first string sets the dialog's width for its lifetime (later
+    -- set_text calls don't grow the window), so keep it the longest line.
+    status_label = dlg:add_label(
+        "Ready. Play a media file and click 'Generate Subtitles' to create and load subtitles.",
+        1, 3, 3, 1)
 
     dlg:show()
     log_info("Dialog shown")
