@@ -1,9 +1,18 @@
 [project]
 
 name = "vlcaption"
-description = "Auto-generate subtitles for VLC media player using local Whisper models"
+description = "Auto-generate subtitles for VLC using fast, fully-local speech-to-text (Parakeet + Whisper)"
 authors = [
     { name = "WT-MM" },
+]
+keywords = ["vlc", "subtitles", "whisper", "parakeet", "speech-to-text", "srt", "transcription", "mlx"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: MacOS X",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Multimedia :: Video",
 ]
 license = "MIT"
 readme = "README.md"
@@ -34,6 +43,7 @@ mlx = [
 
 vlcaption-server = "vlcaption.server:main"
 vlcaption-watch = "vlcaption.watcher:main"
+vlcaption-embed = "vlcaption.embed:main"
 
 [build-system]
 

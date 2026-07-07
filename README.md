@@ -1,8 +1,20 @@
 # VLCaption
 
+[![Tests](https://github.com/WT-MM/VLCaption/actions/workflows/test.yml/badge.svg)](https://github.com/WT-MM/VLCaption/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)
+
 Auto-generate subtitles for whatever is playing in VLC, using fast local
 speech-to-text. Everything runs on your machine — no cloud APIs, no data
 leaves your computer.
+
+```
+$ vlcaption-watch
+Watching VLC (model=auto, every 3s). Ctrl-C to stop.
+New media playing: /Movies/lecture.mp4
+Wrote 812 segments (language=auto): /Movies/lecture.srt
+Pushed subtitles into VLC: /Movies/lecture.srt      # ← appears mid-playback
+```
 
 On Apple Silicon the default engine is NVIDIA **Parakeet TDT 0.6B v3**
 (via [parakeet-mlx](https://github.com/senstella/parakeet-mlx)): better
@@ -30,7 +42,8 @@ within seconds on Apple Silicon, and auto-load on every future open. No VLC
 configuration, no extension, no clicks.
 
 Options: `--model` (default `auto`), `--interval` seconds (default 3),
-`--overwrite`, `--include-audio`.
+`--overwrite`, `--include-audio`, `--embed` (also bake captions into a
+`.subbed` copy of the video).
 
 ### VLC extension
 
@@ -100,6 +113,26 @@ On machines without MLX (Intel Mac, Linux, Windows), Whisper choices run on
 faster-whisper; with an NVIDIA GPU pass `--device cuda` to the server for a
 large speedup.
 
+## Caption files
+
+Captions are always saved as a standard `.srt` next to the media file
+(`movie.mp4` → `movie.srt`), so VLC — and most other players — auto-load
+them on every future open, and you can edit or share them.
+
+To bake the captions **into** the video itself as a selectable subtitle
+track (a lossless remux — video/audio are untouched):
+
+```bash
+vlcaption-embed movie.mp4                    # writes movie.subbed.mp4
+vlcaption-embed movie.mp4 --replace          # overwrites movie.mp4 in place
+vlcaption-embed movie.mkv --language eng     # tag the track's language
+```
+
+Works for mp4/m4v/mov (mov_text), mkv (srt), and webm (webvtt) containers.
+Watch mode can do this automatically with `vlcaption-watch --embed`, which
+writes a `.subbed` copy after each transcription (never in place, since VLC
+still has the original open).
+
 ## Running the Server Manually
 
 The extension auto-launches the server, but you can also run it yourself:
@@ -157,6 +190,17 @@ surface to render subtitles on. For videos, check
 
 **"Only local files are supported"**: VLCaption works with local media
 files only, not streams or URLs.
+
+## Uninstall
+
+```bash
+rm ~/Library/Application\ Support/org.videolan.vlc/lua/extensions/vlcaption.lua  # the extension
+rm -rf ~/.config/vlcaption                                                       # the server launcher
+rm -rf VLCaption                                                                 # this repo + its venv
+```
+
+Downloaded models live in the Hugging Face cache (`~/.cache/huggingface/`)
+and can be removed with `huggingface-cli delete-cache`.
 
 ## License
 

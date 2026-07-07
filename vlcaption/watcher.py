@@ -15,6 +15,7 @@ import time
 from argparse import ArgumentParser
 
 from vlcaption import vlc
+from vlcaption.embed import can_embed, embed_subtitles
 from vlcaption.srt import write_srt_file
 from vlcaption.transcriber import Transcriber
 
@@ -28,10 +29,17 @@ VIDEO_EXTENSIONS = frozenset(
 class Watcher:
     """Sequentially transcribes each new video VLC starts playing."""
 
-    def __init__(self, model: str = "auto", overwrite: bool = False, include_audio: bool = False) -> None:
+    def __init__(
+        self,
+        model: str = "auto",
+        overwrite: bool = False,
+        include_audio: bool = False,
+        embed: bool = False,
+    ) -> None:
         self._model = model
         self._overwrite = overwrite
         self._include_audio = include_audio
+        self._embed = embed
         self._transcriber = Transcriber()
         self._handled: set[str] = set()
 
@@ -64,6 +72,10 @@ class Watcher:
         if not vlc.push_subtitle(srt_path, media_path=path):
             logger.info("Not pushed into the running player; VLC will auto-load it on the next open.")
 
+        if self._embed and can_embed(path):
+            # Sidecar copy, never in place: VLC still has the original open.
+            embed_subtitles(path, srt_path=srt_path, language=result.language if result.language != "auto" else None)
+
     def run(self, interval: float = 3.0) -> None:
         """Poll forever, surviving per-file errors."""
         logger.info("Watching VLC (model=%s, every %.0fs). Ctrl-C to stop.", self._model, interval)
@@ -82,6 +94,11 @@ def main() -> None:
     parser.add_argument("--interval", type=float, default=3.0, help="Poll interval in seconds (default: 3)")
     parser.add_argument("--overwrite", action="store_true", help="Re-transcribe media that already has an .srt")
     parser.add_argument("--include-audio", action="store_true", help="Also transcribe audio-only files")
+    parser.add_argument(
+        "--embed",
+        action="store_true",
+        help="Also write a <name>.subbed.<ext> copy with the subtitles embedded as a track",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -92,7 +109,7 @@ def main() -> None:
     if sys.platform != "darwin":
         parser.error("watch mode currently supports macOS only (uses VLC's AppleScript interface)")
 
-    watcher = Watcher(model=args.model, overwrite=args.overwrite, include_audio=args.include_audio)
+    watcher = Watcher(model=args.model, overwrite=args.overwrite, include_audio=args.include_audio, embed=args.embed)
     try:
         watcher.run(interval=args.interval)
     except KeyboardInterrupt:
