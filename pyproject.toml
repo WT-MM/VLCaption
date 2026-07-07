@@ -44,6 +44,7 @@ mlx = [
 vlcaption-server = "vlcaption.server:main"
 vlcaption-watch = "vlcaption.watcher:main"
 vlcaption-embed = "vlcaption.embed:main"
+vlcaption-install = "vlcaption.install:main"
 
 [build-system]
 
@@ -61,7 +62,7 @@ include = ["vlcaption*"]
 
 [tool.setuptools.package-data]
 
-"vlcaption" = ["*.py", "*.txt", "py.typed"]
+"vlcaption" = ["*.py", "*.txt", "py.typed", "extension/*.lua"]
 
 [tool.setuptools.dynamic]
 

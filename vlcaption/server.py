@@ -26,6 +26,12 @@ IDLE_TIMEOUT_SECONDS = 30 * 60
 _last_activity: float = time.time()
 _idle_timer: threading.Timer | None = None
 
+# --exit-with-vlc liveness polling
+VLC_POLL_SECONDS = 60
+# Two consecutive misses (~2 min) before exiting, so a VLC restart or a
+# slow launch doesn't take the server down with it.
+VLC_MISSES_BEFORE_EXIT = 2
+
 
 def _update_activity() -> None:
     """Reset the idle timer on any request."""
@@ -53,6 +59,27 @@ def _start_idle_timer() -> None:
     _idle_timer = threading.Timer(IDLE_TIMEOUT_SECONDS, _check_idle)
     _idle_timer.daemon = True
     _idle_timer.start()
+
+
+def _watch_vlc_liveness() -> None:
+    """Exit once VLC has been gone for a couple of polls (--exit-with-vlc)."""
+    misses = 0
+    while True:
+        time.sleep(VLC_POLL_SECONDS)
+        if transcriber.is_busy() or vlc.is_running():
+            misses = 0
+            continue
+        misses += 1
+        if misses >= VLC_MISSES_BEFORE_EXIT:
+            logger.info("VLC is no longer running; shutting down.")
+            os.kill(os.getpid(), signal.SIGTERM)
+            return
+
+
+def _start_vlc_liveness_watch() -> None:
+    """Start the VLC liveness watcher thread."""
+    thread = threading.Thread(target=_watch_vlc_liveness, daemon=True)
+    thread.start()
 
 
 def _json_response(data: dict, status: int = 200) -> Response:  # noqa: ANN401
@@ -141,6 +168,11 @@ def main() -> None:
         default="auto",
         help="Compute device for the faster-whisper fallback: auto, cpu, cuda (default: auto)",
     )
+    parser.add_argument(
+        "--exit-with-vlc",
+        action="store_true",
+        help="Shut down a couple of minutes after VLC stops running (used by the extension's launcher)",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -153,6 +185,8 @@ def main() -> None:
     logger.info("Starting VLCaption server on %s:%d (device=%s)", args.host, args.port, args.device)
 
     _start_idle_timer()
+    if args.exit_with_vlc:
+        _start_vlc_liveness_watch()
     app.run(host=args.host, port=args.port, threaded=True)
 
 
