@@ -134,12 +134,14 @@ re-selection — a future mpv/IINA port shares the daemon).
 
 ## Immediate fix list (independent of architecture)
 
-- [ ] `add_subtitle(path, true)` — autoselect (extension/vlcaption.lua)
-- [ ] Remove `/shutdown` from `deactivate()` — rely on the existing
+All implemented and merged (PRs #5-#7), kept for the record:
+
+- [x] `add_subtitle(path, true)` — autoselect (extension/vlcaption.lua)
+- [x] Remove `/shutdown` from `deactivate()` — rely on the existing
       30-min idle timer instead
-- [ ] `set_started()` before model load + a distinct `loading_model` status
-- [ ] Fix detected-language plumbing (store into progress at detection time)
-- [ ] Background the curl in `do_generate` or drop `--max-time` to ≤5s to
+- [x] `set_started()` before model load + a distinct `loading_model` status
+- [x] Fix detected-language plumbing (store into progress at detection time)
+- [x] Background the curl in `do_generate` or drop `--max-time` to ≤5s to
       stay clear of the 10s watchdog
-- [ ] Engine abstraction + parakeet-mlx backend, model dropdown becomes
+- [x] Engine abstraction + parakeet-mlx backend, model dropdown becomes
       engine/quality picker
