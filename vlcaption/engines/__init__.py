@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import platform
+import sys
 
 from vlcaption.engines.base import Engine, ProgressCallback, TranscriptionResult
 
@@ -27,6 +29,15 @@ MODEL_CHOICES: frozenset[str] = frozenset(
 
 def _has_module(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
+
+
+def _is_apple_silicon() -> bool:
+    return sys.platform == "darwin" and platform.machine() == "arm64"
+
+
+def _has_mlx_module(name: str) -> bool:
+    """MLX runs only on Apple-Silicon GPUs; never attempt it elsewhere."""
+    return _is_apple_silicon() and _has_module(name)
 
 
 def normalize_model(model: str) -> str:
@@ -57,26 +68,34 @@ def create_engine(model: str, device: str = "auto") -> Engine:
     model = normalize_model(model)
 
     if model == "auto":
-        if _has_module("parakeet_mlx"):
+        if _has_mlx_module("parakeet_mlx"):
             model = "parakeet"
         else:
             model = "turbo"
 
     if model == "parakeet":
-        if not _has_module("parakeet_mlx"):
-            raise RuntimeError("parakeet-mlx is not installed. Install with: pip install 'vlcaption[mlx]'")
+        if not _has_mlx_module("parakeet_mlx"):
+            raise RuntimeError(
+                "Parakeet needs Apple Silicon with parakeet-mlx installed "
+                "(pip install 'vlcaption[mlx]'); use a whisper model on this machine"
+            )
         from vlcaption.engines.parakeet import ParakeetEngine  # noqa: PLC0415
 
+        logger.info("Engine: parakeet-mlx on the Apple GPU")
         return ParakeetEngine()
 
-    if _has_module("mlx_whisper"):
+    if _has_mlx_module("mlx_whisper"):
         from vlcaption.engines.whisper_mlx import MlxWhisperEngine  # noqa: PLC0415
 
+        logger.info("Engine: mlx-whisper (%s) on the Apple GPU", model)
         return MlxWhisperEngine(model)
 
     if _has_module("faster_whisper"):
         from vlcaption.engines.whisper_ct2 import FasterWhisperEngine  # noqa: PLC0415
 
+        # CTranslate2's device/compute auto-detection picks CUDA + float16
+        # on NVIDIA machines and int8 on CPU.
+        logger.info("Engine: faster-whisper (%s, device=%s)", model, device)
         return FasterWhisperEngine(model, device=device)
 
     raise RuntimeError("No transcription engine installed. Install with: pip install 'vlcaption[mlx]'")

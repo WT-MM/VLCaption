@@ -12,6 +12,7 @@ from flask import Flask, Response, request
 
 from vlcaption import vlc
 from vlcaption.engines import MODEL_CHOICES
+from vlcaption.env import ensure_tool_paths
 from vlcaption.srt import write_srt_file
 from vlcaption.transcriber import Transcriber
 
@@ -147,6 +148,7 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
 
+    ensure_tool_paths()
     transcriber.set_device(args.device)
     logger.info("Starting VLCaption server on %s:%d (device=%s)", args.host, args.port, args.device)
 

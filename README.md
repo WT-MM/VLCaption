@@ -109,9 +109,23 @@ and copies the VLC Lua extension into place.
 Models download automatically on first use. A `whisper-` prefix is also
 accepted (`whisper-base` = `base`).
 
-On machines without MLX (Intel Mac, Linux, Windows), Whisper choices run on
-faster-whisper; with an NVIDIA GPU pass `--device cuda` to the server for a
-large speedup.
+### Hardware support
+
+The `auto` choice picks the fastest stack for your machine:
+
+| Hardware | Engine | Acceleration |
+|----------|--------|--------------|
+| Apple Silicon | Parakeet via parakeet-mlx (Whisper choices via mlx-whisper) | MLX on the Apple GPU |
+| NVIDIA GPU | Whisper turbo via faster-whisper | CUDA, float16 (auto-detected) |
+| Anything else | Whisper turbo via faster-whisper | CPU, int8 |
+
+There's no torch/MPS path on purpose: mlx-whisper already runs the full
+model on the Apple GPU and benchmarks faster than MPS Whisper ports, and
+CTranslate2 has no Metal backend. The server logs which engine it picked
+at the start of each job.
+
+The MLX engines decode audio through the `ffmpeg` CLI, so on a Mac:
+`brew install ffmpeg`.
 
 ## Caption files
 
@@ -177,6 +191,12 @@ correct extensions directory and restart VLC. On macOS it's under the
 
 **Extension menu item needs two clicks**: Known VLC 3.x bug after a dialog
 closes (VideoLAN #27688). Watch mode is unaffected.
+
+**"FFmpeg is not installed or not in your PATH"**: The MLX engines decode
+audio via the `ffmpeg` CLI — `brew install ffmpeg`. If ffmpeg is installed
+but the error appears when the *extension* starts the server, your launcher
+predates the PATH fix (GUI apps don't see Homebrew's PATH): re-run
+`./install.sh` to regenerate it.
 
 **Server won't start**: Run the launcher directly to see errors:
 ```bash

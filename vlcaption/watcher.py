@@ -16,6 +16,7 @@ from argparse import ArgumentParser
 
 from vlcaption import vlc
 from vlcaption.embed import can_embed, embed_subtitles
+from vlcaption.env import ensure_tool_paths
 from vlcaption.srt import write_srt_file
 from vlcaption.transcriber import Transcriber
 
@@ -109,6 +110,7 @@ def main() -> None:
     if sys.platform != "darwin":
         parser.error("watch mode currently supports macOS only (uses VLC's AppleScript interface)")
 
+    ensure_tool_paths()
     watcher = Watcher(model=args.model, overwrite=args.overwrite, include_audio=args.include_audio, embed=args.embed)
     try:
         watcher.run(interval=args.interval)

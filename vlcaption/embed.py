@@ -14,6 +14,8 @@ import subprocess
 import tempfile
 from argparse import ArgumentParser
 
+from vlcaption.env import ensure_tool_paths
+
 logger = logging.getLogger(__name__)
 
 # Containers that support embedded soft subtitles, and the codec each needs.
@@ -137,6 +139,7 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    ensure_tool_paths()
 
     try:
         embed_subtitles(
