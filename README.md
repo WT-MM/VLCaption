@@ -5,11 +5,11 @@
 ![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)
 
 Auto-generate subtitles for whatever is playing in VLC. Fully local — no
-cloud APIs. On Apple Silicon it uses NVIDIA Parakeet via
-[parakeet-mlx](https://github.com/senstella/parakeet-mlx): more accurate
-than whisper-large-v3 in English, ~10-60x realtime, and it doesn't
-hallucinate captions over music or silence. Whisper covers ~100 languages
-as fallback.
+cloud APIs. On Apple Silicon it runs NVIDIA Parakeet on the **Neural
+Engine** via [silicon-asr](https://github.com/WT-MM/silicon-asr): more
+accurate than whisper-large-v3 in English, ~140x realtime (a 2-hour movie
+in under a minute), low-power, and it doesn't hallucinate captions over
+music or silence. Whisper covers ~100 languages as fallback.
 
 ## Use it
 
